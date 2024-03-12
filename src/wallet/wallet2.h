@@ -72,6 +72,7 @@
 #include "message_store.h"
 #include "wallet_light_rpc.h"
 #include "wallet_rpc_helpers.h"
+#include "polyseed/polyseed.hpp"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.wallet2"
@@ -922,6 +923,20 @@ private:
       const epee::wipeable_string& multisig_data, bool create_address_file = false);
 
     /*!
+     * \brief Generates a wallet from a polyseed.
+     * @param wallet_              Name of wallet file
+     * @param password             Password of wallet file
+     * @param seed                 Polyseed data
+     * @param passphrase           Optional seed offset passphrase
+     * @param recover              Whether it is a restore
+     * @param restoreHeight        Override the embedded restore height
+     * @param create_address_file  Whether to create an address file
+     */
+    void generate(const std::string& wallet_, const epee::wipeable_string& password,
+      const polyseed::data &seed, const epee::wipeable_string& passphrase = "",
+      bool recover = false, uint64_t restoreHeight = 0, bool create_address_file = false);
+
+    /*!
      * \brief Generates a wallet or restores one.
      * \param  wallet_              Name of wallet file
      * \param  password             Password of wallet file
@@ -1094,6 +1109,15 @@ private:
      */
     bool is_deterministic() const;
     bool get_seed(epee::wipeable_string& electrum_words, const epee::wipeable_string &passphrase = epee::wipeable_string()) const;
+
+    /*!
+     * \brief get_polyseed  Gets the polyseed (if available) and passphrase (if set) needed to recover the wallet.
+     * @param seed          Polyseed mnemonic phrase
+     * @param passphrase    Seed offset passphrase that was used to restore the wallet
+     * @return              Returns true if the wallet has a polyseed.
+     * Note: both the mnemonic phrase and the passphrase are needed to recover the wallet
+     */
+    bool get_polyseed(epee::wipeable_string& seed, epee::wipeable_string &passphrase) const;
 
     /*!
     * \brief Checks if light wallet. A light wallet sends view key to a server where the blockchain is scanned.
@@ -1569,8 +1593,8 @@ private:
    /*!
     * \brief Calculates the approximate blockchain height from current date/time.
     */
-    uint64_t get_approximate_blockchain_height() const;
-    uint64_t estimate_blockchain_height();
+    uint64_t get_approximate_blockchain_height(uint64_t time = 0) const;
+    uint64_t estimate_blockchain_height(uint64_t time = 0);
     std::vector<size_t> select_available_outputs_from_histogram(uint64_t count, bool atleast, bool unlocked, bool allow_rct);
     std::vector<size_t> select_available_outputs(const std::function<bool(const transfer_details &td)> &f);
     std::vector<size_t> select_available_unmixable_outputs();
@@ -1662,6 +1686,7 @@ private:
     bool parse_uri(const std::string &uri, std::string &address, std::string &payment_id, uint64_t &amount, std::string &tx_description, std::string &recipient_name, std::vector<std::string> &unknown_parameters, std::string &error);
 
     uint64_t get_blockchain_height_by_date(uint16_t year, uint8_t month, uint8_t day);    // 1<=month<=12, 1<=day<=31
+    uint64_t get_blockchain_height_by_timestamp(uint64_t timestamp);
 
     bool is_synced();
 
@@ -2007,6 +2032,7 @@ private:
     std::string seed_language; /*!< Language of the mnemonics (seed). */
     bool is_old_file_format; /*!< Whether the wallet file is of an old file format */
     bool m_watch_only; /*!< no spend key */
+    bool m_polyseed;
     bool m_multisig; /*!< if > 1 spend secret key will not match spend public key */
     uint32_t m_multisig_threshold;
     std::vector<crypto::public_key> m_multisig_signers;
