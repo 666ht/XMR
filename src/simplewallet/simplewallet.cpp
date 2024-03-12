@@ -6917,7 +6917,7 @@ bool simple_wallet::transfer_main(const std::vector<std::string> &args_, bool ca
   {
     // figure out what tx will be necessary
     auto ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, priority, extra,
-      m_current_subaddress_account, subaddr_indices, subtract_fee_from_outputs);
+      m_current_subaddress_account, subaddr_indices, {}, subtract_fee_from_outputs);
 
     if (ptx_vector.empty())
     {
