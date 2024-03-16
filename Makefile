@@ -104,7 +104,7 @@ release-all:
 
 release-static:
 	mkdir -p $(builddir)/release
-	cd $(builddir)/release && cmake -D STATIC=ON -D BUILD_64=ON -D CMAKE_BUILD_TYPE=Release $(topdir) && $(MAKE)
+	cd $(builddir)/release && cmake -D STATIC=ON -D ARCH="x86-64" -D BUILD_64=ON -D CMAKE_BUILD_TYPE=Release $(topdir) && $(MAKE)
 
 coverage:
 	mkdir -p $(builddir)/debug
@@ -129,6 +129,23 @@ release-static-android-armv8:
 	mkdir -p $(builddir)/release/translations
 	cd $(builddir)/release/translations && cmake ../../../translations && $(MAKE)
 	cd $(builddir)/release && CC=aarch64-linux-android-clang CXX=aarch64-linux-android-clang++ cmake -D BUILD_TESTS=OFF -D ARCH="armv8-a" -D STATIC=ON -D BUILD_64=ON -D CMAKE_BUILD_TYPE=Release -D ANDROID=true -D BUILD_TAG="android-armv8" -D CMAKE_SYSTEM_NAME="Android" -D CMAKE_ANDROID_STANDALONE_TOOLCHAIN="${ANDROID_STANDALONE_TOOLCHAIN_PATH}" -D CMAKE_ANDROID_ARCH_ABI="arm64-v8a" ../.. && $(MAKE)
+
+release-static-android-armv7-wallet_api:
+	mkdir -p $(builddir)/release
+	cd $(builddir)/release && cmake -D MONERUJO_HIDAPI=ON -D USE_DEVICE_TREZOR=OFF -D BUILD_GUI_DEPS=1 -D BUILD_TESTS=OFF -D ARCH="armv7-a" -D STATIC=ON -D BUILD_64=OFF -D CMAKE_BUILD_TYPE=release -D ANDROID=true -D BUILD_TAG="android-armv7" -D CMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake" -D ANDROID_ABI="armeabi-v7a" -D ANDROID_PLATFORM=android-21 -D ANDROID_ARM_MODE=arm -D NO_AES=true -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH -D CMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH -D CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH ../.. && $(MAKE) wallet_api
+
+release-static-android-armv8-wallet_api:
+	mkdir -p $(builddir)/release
+	cd $(builddir)/release && cmake -D MONERUJO_HIDAPI=ON -D USE_DEVICE_TREZOR=OFF -D BUILD_GUI_DEPS=1 -D BUILD_TESTS=OFF -D ARCH="armv8-a" -D STATIC=ON -D BUILD_64=ON -D CMAKE_BUILD_TYPE=release -D ANDROID=true -D BUILD_TAG="android-armv8" -D CMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake" -D ANDROID_ABI="arm64-v8a" -D ANDROID_PLATFORM=android-21 -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH -D CMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH -D CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH ../.. && $(MAKE) wallet_api
+
+release-static-android-x86_64-wallet_api:
+	mkdir -p $(builddir)/release
+	cd $(builddir)/release && CC=x86_64-linux-android-clang CXX=x86_64-linux-android-clang++ cmake -D MONERUJO_HIDAPI=ON -D USE_DEVICE_TREZOR=OFF -D BUILD_GUI_DEPS=1 -D BUILD_TESTS=OFF -D ARCH="x86-64" -D STATIC=ON -D BUILD_64=ON -D CMAKE_BUILD_TYPE=release -D ANDROID=true -D BUILD_TAG="android-x86_64" -D CMAKE_SYSTEM_NAME="Android" -D CMAKE_ANDROID_STANDALONE_TOOLCHAIN="${ANDROID_STANDALONE_TOOLCHAIN_PATH}" -D CMAKE_ANDROID_ARCH_ABI="x86_64" ../.. && $(MAKE) wallet_api
+
+release-static-android-x86-wallet_api:
+	mkdir -p $(builddir)/release
+	cd $(builddir)/release && CC=i686-linux-android-clang CXX=i686-linux-android-clang++ cmake -D MONERUJO_HIDAPI=ON -D USE_DEVICE_TREZOR=OFF -D BUILD_GUI_DEPS=1 -D BUILD_TESTS=OFF -D ARCH="i686" -D STATIC=ON -D BUILD_64=OFF -D CMAKE_BUILD_TYPE=release -D ANDROID=true -D BUILD_TAG="android-x86" -D CMAKE_SYSTEM_NAME="Android" -D CMAKE_ANDROID_STANDALONE_TOOLCHAIN="${ANDROID_STANDALONE_TOOLCHAIN_PATH}" -D CMAKE_ANDROID_ARCH_ABI="x86" ../.. && $(MAKE) wallet_api
+
 
 release-static-linux-armv8:
 	mkdir -p $(builddir)/release
