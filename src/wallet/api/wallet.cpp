@@ -1131,6 +1131,24 @@ uint64_t WalletImpl::unlockedBalance(uint32_t accountIndex) const
     return m_wallet->unlocked_balance(accountIndex, false);
 }
 
+uint64_t WalletImpl::viewOnlyBalance(uint32_t accountIndex, const std::vector<std::string> &key_images) const
+{
+    clearStatus();
+
+    std::vector<crypto::key_image> kis;
+    for (const auto &key_image : key_images) {
+        crypto::key_image ki;
+        if (!epee::string_tools::hex_to_pod(key_image, ki))
+        {
+            setStatusError(tr("failed to parse key image"));
+            return 0;
+        }
+        kis.push_back(ki);
+    }
+
+    return m_wallet->view_only_balance(accountIndex, kis);
+}
+
 uint64_t WalletImpl::blockChainHeight() const
 {
     if(m_wallet->light_wallet()) {
@@ -1291,6 +1309,11 @@ bool WalletImpl::submitTransaction(const string &fileName) {
   }
 
   return true;
+}
+
+bool WalletImpl::hasUnknownKeyImages() const
+{
+    return m_wallet->has_unknown_key_images();
 }
 
 bool WalletImpl::exportKeyImages(const string &filename, bool all) 

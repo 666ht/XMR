@@ -671,7 +671,8 @@ struct Wallet
             result += unlockedBalance(i);
         return result;
     }
-
+    virtual uint64_t viewOnlyBalance(uint32_t accountIndex, const std::vector<std::string> &key_images = {}) const = 0;
+    
    /**
     * @brief watchOnly - checks if wallet is watch only
     * @return - true if watch only
@@ -956,6 +957,8 @@ struct Wallet
      */
     virtual uint64_t estimateTransactionFee(const std::vector<std::pair<std::string, uint64_t>> &destinations,
                                             PendingTransaction::Priority priority) const = 0;
+                                            
+    virtual bool hasUnknownKeyImages() const = 0;
 
    /*!
     * \brief exportKeyImages - exports key images to file

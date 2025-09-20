@@ -123,6 +123,7 @@ public:
     bool setProxy(const std::string &address) override;
     uint64_t balance(uint32_t accountIndex = 0) const override;
     uint64_t unlockedBalance(uint32_t accountIndex = 0) const override;
+    uint64_t viewOnlyBalance(uint32_t accountIndex, const std::vector<std::string> &key_images) const override;
     uint64_t blockChainHeight() const override;
     uint64_t approximateBlockChainHeight() const override;
     uint64_t estimateBlockChainHeight() const override;
@@ -178,6 +179,7 @@ public:
     virtual PendingTransaction * createSweepUnmixableTransaction() override;
     bool submitTransaction(const std::string &fileName) override;
     virtual UnsignedTransaction * loadUnsignedTx(const std::string &unsigned_filename) override;
+    bool hasUnknownKeyImages() const override;
     bool exportKeyImages(const std::string &filename, bool all = false) override;
     bool importKeyImages(const std::string &filename) override;
     bool exportOutputs(const std::string &filename, bool all = false) override;
