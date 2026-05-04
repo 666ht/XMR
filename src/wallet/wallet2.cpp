@@ -14884,6 +14884,13 @@ void wallet2::stop_background_sync(const epee::wipeable_string &wallet_password,
 
   // Set the plaintext spend key
   m_account.set_spend_key(recovered_spend_key);
+  
+  // Re-load keys to restore m_polyseed and m_passphrase
+  if (m_polyseed && m_background_sync_type == BackgroundSyncReusePassword && !m_wallet_file.empty())
+  {
+    load_keys(m_keys_file, wallet_password);
+    m_account.set_spend_key(recovered_spend_key);
+  }
 
   // Encrypt the spend key when done if needed
   epee::misc_utils::auto_scope_leave_caller keys_reencryptor;
