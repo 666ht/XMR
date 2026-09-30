@@ -2575,36 +2575,44 @@ void WalletImpl::refreshThreadFunc()
 
 void WalletImpl::doRefresh()
 {
-    bool rescan = m_refreshShouldRescan.exchange(false);
-    // synchronizing async and sync refresh calls
+    // Synchronize async and sync refresh calls. Keep a pending rescan request
+    // until the daemon is actually ready; otherwise the request can be consumed
+    // while daemonSynced() is false and the restored wallet would only perform
+    // a normal incremental refresh on the next attempt.
     boost::lock_guard<boost::mutex> guarg(m_refreshMutex2);
+    bool rescan_executed = false;
+    bool daemon_ready = false;
     do try {
-        LOG_PRINT_L3(__FUNCTION__ << ": doRefresh, rescan = "<<rescan);
-        // Syncing daemon and refreshing wallet simultaneously is very resource intensive.
-        // Disable refresh if wallet is disconnected or daemon isn't synced.
-        if (m_wallet->light_wallet() || daemonSynced()) {
-            if(rescan)
-                m_wallet->rescan_blockchain(false);
-            m_wallet->refresh(trustedDaemon());
-            m_synchronized = m_wallet->is_synced();
-            // Refresh history after every completed wallet refresh. Rescans can
-            // rebuild transfers without reliably leaving the API history cache at
-            // count == 0, so only refreshing an empty history can leave the Java
-            // layer with stale/empty transaction records.
-            m_history->refresh();
-        } else {
-           LOG_PRINT_L3(__FUNCTION__ << ": skipping refresh - daemon is not synced");
+        daemon_ready = m_wallet->light_wallet() || daemonSynced();
+        if (!daemon_ready) {
+            LOG_PRINT_L3(__FUNCTION__ << ": skipping refresh - daemon is not synced; "
+                                      << "keeping pending rescan request");
+            break;
         }
+
+        const bool rescan_requested = m_refreshShouldRescan.exchange(false);
+        LOG_PRINT_L3(__FUNCTION__ << ": doRefresh, rescan = " << rescan_requested);
+
+        if (rescan_requested)
+            m_wallet->rescan_blockchain(false);
+
+        m_wallet->refresh(trustedDaemon());
+        m_synchronized = m_wallet->is_synced();
+        // Refresh history after every completed wallet refresh. Rescans can
+        // rebuild transfers without reliably leaving the API history cache at
+        // count == 0, so only refreshing an empty history can leave the Java
+        // layer with stale/empty transaction records.
+        m_history->refresh();
+        rescan_executed = rescan_requested;
     } catch (const std::exception &e) {
         setStatusError(e.what());
         break;
-    }while(!rescan && (rescan=m_refreshShouldRescan.exchange(false))); // repeat if not rescanned and rescan was requested
+    } while (!rescan_executed && m_refreshShouldRescan.load() && daemon_ready);
 
     if (m_wallet2Callback->getListener()) {
         m_wallet2Callback->getListener()->refreshed();
     }
 }
-
 
 void WalletImpl::startRefresh()
 {
