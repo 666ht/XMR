@@ -2592,7 +2592,9 @@ void WalletImpl::doRefresh()
         }
 
         const bool rescan_requested = m_refreshShouldRescan.exchange(false);
-        LOG_PRINT_L3(__FUNCTION__ << ": doRefresh, rescan = " << rescan_requested);
+        const bool was_synchronized = m_synchronized;
+        LOG_PRINT_L3(__FUNCTION__ << ": doRefresh, rescan = " << rescan_requested
+                                  << ", was_synchronized = " << was_synchronized);
 
         if (rescan_requested) {
             // Clear the wallet scan cache without starting an embedded refresh.
@@ -2622,12 +2624,16 @@ void WalletImpl::doRefresh()
         break;
     } while (!rescan_executed && m_refreshShouldRescan.load() && daemon_ready);
 
-    // Do not signal "refreshed" when refresh was skipped because the
-    // daemon was not ready. Clients use this callback as the end-of-sync
-    // signal; emitting it here makes the first sync look completed even
-    // though no wallet scan occurred.
-    if (refresh_completed && m_wallet2Callback->getListener()) {
+    // "refreshed" is the end-of-initial-sync signal used by the Android
+    // layer. Do not emit it for ordinary periodic background refreshes after
+    // the wallet is already synchronized, otherwise the client can present a
+    // second fake sync every refresh interval.
+    if (refresh_completed && (!was_synchronized || rescan_executed)
+            && m_wallet2Callback->getListener()) {
         m_wallet2Callback->getListener()->refreshed();
+    } else if (refresh_completed) {
+        LOG_PRINT_L3(__FUNCTION__ << ": background refresh completed; "
+                                  << "suppressing refreshed callback");
     }
 }
 
