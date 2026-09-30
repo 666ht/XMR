@@ -161,6 +161,9 @@ Wallet *WalletManagerImpl::createWalletFromPolyseed(const std::string &path, con
                                                     bool newWallet, uint64_t restoreHeight, uint64_t kdf_rounds)
 {
     WalletImpl * wallet = new WalletImpl(nettype, kdf_rounds);
+    if (restoreHeight > 0) {
+        wallet->setRefreshFromBlockHeight(restoreHeight);
+    }
     wallet->createFromPolyseed(path, password, mnemonic, passphrase, newWallet, restoreHeight);
     return wallet;
 }
