@@ -2583,6 +2583,7 @@ void WalletImpl::doRefresh()
     bool rescan_executed = false;
     bool daemon_ready = false;
     bool refresh_completed = false;
+    const bool was_synchronized = m_synchronized;
     do try {
         daemon_ready = m_wallet->light_wallet() || daemonSynced();
         if (!daemon_ready) {
@@ -2592,7 +2593,6 @@ void WalletImpl::doRefresh()
         }
 
         const bool rescan_requested = m_refreshShouldRescan.exchange(false);
-        const bool was_synchronized = m_synchronized;
         LOG_PRINT_L3(__FUNCTION__ << ": doRefresh, rescan = " << rescan_requested
                                   << ", was_synchronized = " << was_synchronized);
 
