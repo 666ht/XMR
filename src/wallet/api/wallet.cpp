@@ -2587,12 +2587,11 @@ void WalletImpl::doRefresh()
                 m_wallet->rescan_blockchain(false);
             m_wallet->refresh(trustedDaemon());
             m_synchronized = m_wallet->is_synced();
-            // assuming if we have empty history, it wasn't initialized yet
-            // for further history changes client need to update history in
-            // "on_money_received" and "on_money_sent" callbacks
-            if (m_history->count() == 0) {
-                m_history->refresh();
-            }
+            // Refresh history after every completed wallet refresh. Rescans can
+            // rebuild transfers without reliably leaving the API history cache at
+            // count == 0, so only refreshing an empty history can leave the Java
+            // layer with stale/empty transaction records.
+            m_history->refresh();
         } else {
            LOG_PRINT_L3(__FUNCTION__ << ": skipping refresh - daemon is not synced");
         }
