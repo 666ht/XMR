@@ -2593,8 +2593,13 @@ void WalletImpl::doRefresh()
         const bool rescan_requested = m_refreshShouldRescan.exchange(false);
         LOG_PRINT_L3(__FUNCTION__ << ": doRefresh, rescan = " << rescan_requested);
 
-        if (rescan_requested)
-            m_wallet->rescan_blockchain(false);
+        if (rescan_requested) {
+            // Clear the wallet scan cache without starting an embedded refresh.
+            // The single refresh below is the only blockchain scan for this
+            // rescan request; calling rescan_blockchain(false) with its default
+            // refresh=true would perform a second refresh pass.
+            m_wallet->rescan_blockchain(false, false);
+        }
 
         m_wallet->refresh(trustedDaemon());
         m_synchronized = m_wallet->is_synced();
