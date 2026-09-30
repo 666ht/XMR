@@ -2608,6 +2608,12 @@ void WalletImpl::doRefresh()
         // count == 0, so only refreshing an empty history can leave the Java
         // layer with stale/empty transaction records.
         m_history->refresh();
+        // During the first full scan, money callbacks may be suppressed until
+        // m_synchronized becomes true. Emit one final update after the scan so
+        // clients observe the balance and rebuilt transaction history without
+        // triggering another wallet refresh.
+        if (m_synchronized && m_wallet2Callback->getListener())
+            m_wallet2Callback->getListener()->updated();
         rescan_executed = rescan_requested;
     } catch (const std::exception &e) {
         setStatusError(e.what());
