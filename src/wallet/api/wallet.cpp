@@ -2582,6 +2582,7 @@ void WalletImpl::doRefresh()
     boost::lock_guard<boost::mutex> guarg(m_refreshMutex2);
     bool rescan_executed = false;
     bool daemon_ready = false;
+    bool refresh_completed = false;
     do try {
         daemon_ready = m_wallet->light_wallet() || daemonSynced();
         if (!daemon_ready) {
@@ -2608,6 +2609,7 @@ void WalletImpl::doRefresh()
         // count == 0, so only refreshing an empty history can leave the Java
         // layer with stale/empty transaction records.
         m_history->refresh();
+        refresh_completed = true;
         // During the first full scan, money callbacks may be suppressed until
         // m_synchronized becomes true. Emit one final update after the scan so
         // clients observe the balance and rebuilt transaction history without
@@ -2620,7 +2622,11 @@ void WalletImpl::doRefresh()
         break;
     } while (!rescan_executed && m_refreshShouldRescan.load() && daemon_ready);
 
-    if (m_wallet2Callback->getListener()) {
+    // Do not signal "refreshed" when refresh was skipped because the
+    // daemon was not ready. Clients use this callback as the end-of-sync
+    // signal; emitting it here makes the first sync look completed even
+    // though no wallet scan occurred.
+    if (refresh_completed && m_wallet2Callback->getListener()) {
         m_wallet2Callback->getListener()->refreshed();
     }
 }
