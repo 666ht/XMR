@@ -15873,80 +15873,39 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
   }
 
   std::string err;
-  uint64_t height_min = 0;
-  uint64_t height_max = get_daemon_blockchain_height(err) - 1;
-  if (!err.empty())
-  {
+  const uint64_t daemon_height = get_daemon_blockchain_height(err);
+  if (!err.empty() || daemon_height == 0)
     throw std::runtime_error("failed to get blockchain height");
-  }
-  while (true)
+
+  uint64_t height_min = 0;
+  uint64_t height_max = daemon_height - 1;
+
+  cryptonote::block_header_response header_min;
+  cryptonote::block_header_response header_max;
+  if (m_node_rpc_proxy.get_block_header_by_height(height_min, header_min))
+    throw std::runtime_error("failed to get block timestamp");
+  if (m_node_rpc_proxy.get_block_header_by_height(height_max, header_max))
+    throw std::runtime_error("failed to get block timestamp");
+
+  if (timestamp_target <= header_min.timestamp)
+    return height_min;
+  if (timestamp_target > header_max.timestamp)
+    throw std::runtime_error("specified date is in the future");
+
+  while (height_min < height_max)
   {
-    COMMAND_RPC_GET_BLOCKS_BY_HEIGHT::request req;
-    COMMAND_RPC_GET_BLOCKS_BY_HEIGHT::response res;
-    uint64_t height_mid = (height_min + height_max) / 2;
-    req.heights =
-    {
-      height_min,
-      height_mid,
-      height_max
-    };
+    const uint64_t height_mid = height_min + (height_max - height_min) / 2;
+    cryptonote::block_header_response header_mid;
+    if (m_node_rpc_proxy.get_block_header_by_height(height_mid, header_mid))
+      throw std::runtime_error("failed to get block timestamp");
 
-    bool r;
-    {
-      const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
-      uint64_t pre_call_credits = m_rpc_payment_state.credits;
-      req.client = get_client_signature();
-      r = net_utils::invoke_http_bin("/getblocks_by_height.bin", req, res, *m_http_client, rpc_timeout);
-      if (r && res.status == CORE_RPC_STATUS_OK)
-        check_rpc_cost("/getblocks_by_height.bin", res.credits, pre_call_credits, 3 * COST_PER_BLOCK);
-    }
-
-    if (!r || res.status != CORE_RPC_STATUS_OK)
-    {
-      std::ostringstream oss;
-      oss << "failed to get blocks by heights: ";
-      for (auto height : req.heights)
-        oss << height << ' ';
-      oss << endl << "reason: ";
-      if (!r)
-        oss << "possibly lost connection to daemon";
-      else if (res.status == CORE_RPC_STATUS_BUSY)
-        oss << "daemon is busy";
-      else
-        oss << get_rpc_status(res.status);
-      throw std::runtime_error(oss.str());
-    }
-    cryptonote::block blk_min, blk_mid, blk_max;
-    if (res.blocks.size() < 3) throw std::runtime_error("Not enough blocks returned from daemon");
-    if (!parse_and_validate_block_from_blob(res.blocks[0].block, blk_min)) throw std::runtime_error("failed to parse blob at height " + std::to_string(height_min));
-    if (!parse_and_validate_block_from_blob(res.blocks[1].block, blk_mid)) throw std::runtime_error("failed to parse blob at height " + std::to_string(height_mid));
-    if (!parse_and_validate_block_from_blob(res.blocks[2].block, blk_max)) throw std::runtime_error("failed to parse blob at height " + std::to_string(height_max));
-    uint64_t timestamp_min = blk_min.timestamp;
-    uint64_t timestamp_mid = blk_mid.timestamp;
-    uint64_t timestamp_max = blk_max.timestamp;
-    if (!(timestamp_min <= timestamp_mid && timestamp_mid <= timestamp_max))
-    {
-      // the timestamps are not in the chronological order. 
-      // assuming they're sufficiently close to each other, simply return the smallest height
-      return std::min({height_min, height_mid, height_max});
-    }
-    if (timestamp_target > timestamp_max)
-    {
-      throw std::runtime_error("specified date is in the future");
-    }
-    if (timestamp_target <= timestamp_min + 2 * 24 * 60 * 60)   // two days of "buffer" period
-    {
-      return height_min;
-    }
-    if (timestamp_target <= timestamp_mid)
-      height_max = height_mid;
+    if (header_mid.timestamp < timestamp_target)
+      height_min = height_mid + 1;
     else
-      height_min = height_mid;
-    if (height_max - height_min <= 2 * 24 * 30)        // don't divide the height range finer than two days
-    {
-      return height_min;
-    }
+      height_max = height_mid;
   }
+
+  return height_min;
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::is_synced()
