@@ -2138,9 +2138,9 @@ std::string WalletImpl::getUserNote(const std::string &txid) const
 
 std::string WalletImpl::getTxKey(const std::string &txid_str) const
 {
-    if (checkBackgroundSync("cannot get tx key"))
-        return "";
-
+    // A cached tx key is wallet-local data and remains available during
+    // background sync. Only the non-cached cold-device fallback needs the
+    // normal background-sync restriction.
     crypto::hash txid;
     if(!epee::string_tools::hex_to_pod(txid_str, txid))
     {

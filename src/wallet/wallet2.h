@@ -2005,6 +2005,8 @@ private:
     hashchain m_blockchain;
     serializable_unordered_map<crypto::hash, unconfirmed_transfer_details> m_unconfirmed_txs;
     serializable_unordered_map<crypto::hash, confirmed_transfer_details> m_confirmed_txs;
+    // Destination metadata is wallet-local and is not recoverable from the blockchain after a soft rescan. Keep it transiently so a rescan does not erase sent addresses.
+    std::unordered_map<crypto::hash, std::vector<cryptonote::tx_destination_entry>> m_rescan_preserved_dests;
     serializable_unordered_multimap<crypto::hash, pool_payment_details> m_unconfirmed_payments;
     serializable_unordered_map<crypto::hash, crypto::secret_key> m_tx_keys;
     cryptonote::checkpoints m_checkpoints;

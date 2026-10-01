@@ -3061,6 +3061,14 @@ void wallet2::process_outgoing(const crypto::hash &txid, const cryptonote::trans
   entry.first->second.m_timestamp = ts;
   entry.first->second.m_unlock_time = tx.unlock_time;
 
+  auto preserved_dests = m_rescan_preserved_dests.find(txid);
+  if (preserved_dests != m_rescan_preserved_dests.end())
+  {
+    if (entry.first->second.m_dests.empty())
+      entry.first->second.m_dests = std::move(preserved_dests->second);
+    m_rescan_preserved_dests.erase(preserved_dests);
+  }
+
   add_rings(tx);
 }
 //----------------------------------------------------------------------------------------------------
@@ -7417,6 +7425,21 @@ void wallet2::rescan_blockchain(bool hard, bool refresh, bool keep_key_images)
   CHECK_AND_ASSERT_THROW_MES(!hard || !keep_key_images, "Cannot preserve key images on hard rescan");
   const size_t transfers_cnt = m_transfers.size();
   crypto::hash transfers_hash{};
+
+  // A soft rescan rebuilds m_confirmed_txs from on-chain data, but recipient
+  // addresses for sent transactions are wallet-local metadata and cannot be
+  // reconstructed from the blockchain. Preserve them across the reset and
+  // restore them when the corresponding outgoing transaction is seen again.
+  if (!hard)
+  {
+    m_rescan_preserved_dests.clear();
+    m_rescan_preserved_dests.reserve(m_confirmed_txs.size());
+    for (const auto &entry: m_confirmed_txs)
+    {
+      if (!entry.second.m_dests.empty())
+        m_rescan_preserved_dests.emplace(entry.first, entry.second.m_dests);
+    }
+  }
 
   if(hard)
   {
