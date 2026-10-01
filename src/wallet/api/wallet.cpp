@@ -1161,6 +1161,14 @@ uint64_t WalletImpl::approximateBlockChainHeight() const
     return m_wallet->get_approximate_blockchain_height();
 }
 
+uint64_t WalletImpl::getBlockChainHeightByDate(uint16_t year, uint8_t month, uint8_t day) const {
+    return m_wallet->get_blockchain_height_by_date(year, month, day);
+}
+
+uint64_t WalletImpl::getBlockTimestamp(uint64_t height) const {
+    return m_wallet->get_block_timestamp(height);
+}
+
 uint64_t WalletImpl::estimateBlockChainHeight() const
 {
     return m_wallet->estimate_blockchain_height();
