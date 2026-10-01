@@ -15854,6 +15854,13 @@ uint64_t wallet2::get_blockchain_height_by_date(uint16_t year, uint8_t month, ui
   return get_blockchain_height_by_timestamp(timestamp_target);
 }
 
+uint64_t wallet2::get_block_timestamp(uint64_t height) const {
+  cryptonote::block_header_response block_header;
+  const boost::optional<std::string> result = m_node_rpc_proxy.get_block_header_by_height(height, block_header);
+  if (result) throw std::runtime_error(*result);
+  return block_header.timestamp;
+}
+
 uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) {
   uint32_t version;
   if (!check_connection(&version))
