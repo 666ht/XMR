@@ -43,6 +43,7 @@
 #include <boost/thread/lock_guard.hpp>
 #include <atomic>
 #include <random>
+#include <unordered_map>
 
 #include "include_base_utils.h"
 #include "cryptonote_basic/account.h"
