@@ -703,6 +703,8 @@ struct Wallet
     * @return
     **/ 
     virtual uint64_t estimateBlockChainHeight() const = 0;
+    virtual uint64_t getBlockChainHeightByDate(uint16_t year, uint8_t month, uint8_t day) const = 0;
+    virtual uint64_t getBlockTimestamp(uint64_t height) const = 0;
     /**
      * @brief daemonBlockChainHeight - returns daemon blockchain height
      * @return 0 - in case error communicating with the daemon.
