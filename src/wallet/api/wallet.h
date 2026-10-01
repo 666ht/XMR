@@ -127,6 +127,8 @@ public:
     uint64_t blockChainHeight() const override;
     uint64_t approximateBlockChainHeight() const override;
     uint64_t estimateBlockChainHeight() const override;
+    uint64_t getBlockChainHeightByDate(uint16_t year, uint8_t month, uint8_t day) const override;
+    uint64_t getBlockTimestamp(uint64_t height) const override;
     uint64_t daemonBlockChainHeight() const override;
     uint64_t daemonBlockChainTargetHeight() const override;
     bool synchronized() const override;
