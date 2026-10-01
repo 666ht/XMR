@@ -376,7 +376,7 @@
         <location filename="../src/wallet/api/wallet.cpp" line="1537"/>
         <location filename="../src/wallet/api/wallet.cpp" line="1629"/>
         <source>not enough money to transfer, available only %s, transaction amount %s = %s + %s (fee)</source>
-        <translation type="unfinished"></translation>
+        <translation>余额不足，无法转账，可用余额仅为 %s，交易金额为 %s = %s + %s（手续费）</translation>
     </message>
     <message>
         <location filename="../src/wallet/api/wallet.cpp" line="1547"/>
