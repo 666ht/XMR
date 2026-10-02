@@ -5739,7 +5739,10 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
   setup_keys(password);
 
   if (recover) {
-      m_refresh_from_block_height = estimate_blockchain_height(restoreHeight > 0 ? restoreHeight : seed.birthday());
+      // Polyseed birthday is already a block height in the recovery API.
+      // Do not pass it through estimate_blockchain_height(), whose argument
+      // is a timestamp and would turn the selected height into a wrong scan start.
+      m_refresh_from_block_height = restoreHeight > 0 ? restoreHeight : estimate_blockchain_height(seed.birthday());
   } else {
       m_refresh_from_block_height = estimate_blockchain_height();
   }
