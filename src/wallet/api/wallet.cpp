@@ -740,7 +740,7 @@ bool WalletImpl::createFromPolyseed(const std::string &path, const std::string &
     try {
         auto lang = polyseed.decode(seed.data());
         m_wallet->set_seed_language(lang.name());
-        m_wallet->generate(path, password, polyseed, passphrase, !newWallet);
+        m_wallet->generate(path, password, polyseed, passphrase, !newWallet, restoreHeight);
     }
     catch (const std::exception &e) {
         setStatusError(e.what());
