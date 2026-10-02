@@ -790,6 +790,15 @@ struct Wallet
     virtual void rescanBlockchainAsync() = 0;
 
     /**
+     * @brief rescanBlockchainAsyncFromHeight - rescans an existing wallet once
+     *        from the supplied block height without changing the wallet's
+     *        persistent recovery/refresh height.
+     * @param height blockchain height to use for this rescan only
+     * @return true when the rescan request was accepted
+     */
+    virtual bool rescanBlockchainAsyncFromHeight(uint64_t height) = 0;
+
+    /**
      * @brief setAutoRefreshInterval - setup interval for automatic refresh.
      * @param seconds - interval in millis. if zero or less than zero - automatic refresh disabled;
      */
