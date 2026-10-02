@@ -1270,9 +1270,27 @@ bool WalletImpl::rescanBlockchainAsyncFromHeight(uint64_t height)
         return false;
 
     clearStatus();
-    m_customRescanFromBlockHeight = height;
-    m_customRescanHeightSet = true;
-    m_refreshShouldRescan = true;
+
+    // Clear the old wallet scan cursor synchronously before returning to Java.
+    // Otherwise getBlockChainHeight() can still report the previous tip for the
+    // first 400ms polls, which makes the UI show a false remaining range.
+    try
+    {
+        boost::lock_guard<boost::mutex> guard(m_refreshMutex2);
+        m_customRescanFromBlockHeight = height;
+        m_customRescanHeightSet = true;
+        m_refreshShouldRescan = true;
+        m_wallet->rescan_blockchain(false, false);
+    }
+    catch (const std::exception &e)
+    {
+        m_customRescanHeightSet = false;
+        setStatusError(e.what());
+        return false;
+    }
+
+    // The local chain is already cleared. doRefresh() only needs to set the
+    // temporary custom refresh height and fetch blocks asynchronously.
     refreshAsync();
     return status() == Status_Ok;
 }
@@ -2608,18 +2626,17 @@ void WalletImpl::doRefresh()
         if (m_wallet->light_wallet() || daemonSynced()) {
             const bool customRescan = rescan && m_customRescanHeightSet.load();
             if (customRescan) {
-                // Use the requested height only for this one rescan. The wallet's
-                // stored recovery/refresh height is restored before returning.
+                // The local blockchain was cleared when the async custom-rescan
+                // request was accepted. Keep the requested height temporary only
+                // for this refresh, then restore the wallet's stored recovery height.
                 const uint64_t originalHeight = m_wallet->get_refresh_from_block_height();
                 const uint64_t customHeight = m_customRescanFromBlockHeight.load();
                 m_wallet->set_refresh_from_block_height(customHeight);
                 try {
-                    // Avoid the refresh built into rescan_blockchain(), so the
-                    // explicit refresh starts from customHeight exactly.
-                    m_wallet->rescan_blockchain(false, false);
                     m_wallet->refresh(trustedDaemon());
                 } catch (...) {
                     m_wallet->set_refresh_from_block_height(originalHeight);
+                    m_customRescanHeightSet = false;
                     throw;
                 }
                 m_wallet->set_refresh_from_block_height(originalHeight);
