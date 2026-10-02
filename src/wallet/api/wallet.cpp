@@ -2637,7 +2637,16 @@ void WalletImpl::doRefresh()
                 m_history->refresh();
             }
         } else {
-           LOG_PRINT_L3(__FUNCTION__ << ": skipping refresh - daemon is not synced");
+           // Keep an explicitly requested rescan queued until the daemon is fully
+           // synchronized. Without this, doRefresh() would consume
+           // m_refreshShouldRescan and a later normal refresh would look successful
+           // while never executing the requested custom-height rescan.
+           if (rescan) {
+               m_refreshShouldRescan = true;
+               LOG_PRINT_L1(__FUNCTION__ << ": daemon not synced; keeping requested rescan queued");
+           } else {
+               LOG_PRINT_L3(__FUNCTION__ << ": skipping refresh - daemon is not synced");
+           }
         }
     } catch (const std::exception &e) {
         setStatusError(e.what());
