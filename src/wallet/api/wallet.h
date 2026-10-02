@@ -135,7 +135,8 @@ public:
     bool refresh() override;
     void refreshAsync() override;
     bool rescanBlockchain() override;
-    void rescanBlockchainAsync() override;    
+    void rescanBlockchainAsync() override;
+    bool rescanBlockchainAsyncFromHeight(uint64_t height) override;
     void setAutoRefreshInterval(int millis) override;
     int autoRefreshInterval() const override;
     void setRefreshFromBlockHeight(uint64_t refresh_from_block_height) override;
@@ -297,6 +298,10 @@ private:
     std::atomic<bool> m_refreshThreadDone;
     std::atomic<int>  m_refreshIntervalMillis;
     std::atomic<bool> m_refreshShouldRescan;
+    // Height used only by the next requested wallet rescan. It must never
+    // overwrite the wallet's persistent recovery/refresh height.
+    std::atomic<bool> m_customRescanHeightSet;
+    std::atomic<uint64_t> m_customRescanFromBlockHeight;
     // synchronizing  refresh loop;
     boost::mutex        m_refreshMutex;
 
