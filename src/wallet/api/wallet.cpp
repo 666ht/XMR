@@ -2615,7 +2615,7 @@ void WalletImpl::doRefresh()
                 m_wallet->set_refresh_from_block_height(customHeight);
                 try {
                     // Avoid the refresh built into rescan_blockchain(), so the
-                    // explicit refresh below starts from customHeight exactly.
+                    // explicit refresh starts from customHeight exactly.
                     m_wallet->rescan_blockchain(false, false);
                     m_wallet->refresh(trustedDaemon());
                 } catch (...) {
@@ -2624,10 +2624,11 @@ void WalletImpl::doRefresh()
                 }
                 m_wallet->set_refresh_from_block_height(originalHeight);
                 m_customRescanHeightSet = false;
-            } else if (rescan) {
-                m_wallet->rescan_blockchain(false);
+            } else {
+                if (rescan)
+                    m_wallet->rescan_blockchain(false);
+                m_wallet->refresh(trustedDaemon());
             }
-            m_wallet->refresh(trustedDaemon());
             m_synchronized = m_wallet->is_synced();
             // assuming if we have empty history, it wasn't initialized yet
             // for further history changes client need to update history in
