@@ -422,7 +422,7 @@ boost::optional<std::string> NodeRPCProxy::get_transactions(const std::vector<cr
   return boost::optional<std::string>();
 }
 
-boost::optional<std::string> NodeRPCProxy::get_block_header_by_height(uint64_t height, cryptonote::block_header_response &block_header)
+boost::optional<std::string> NodeRPCProxy::get_block_header_by_height(uint64_t height, cryptonote::block_header_response &block_header) const
 {
   if (m_offline)
     return boost::optional<std::string>("offline");
