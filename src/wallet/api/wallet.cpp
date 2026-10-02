@@ -461,6 +461,8 @@ WalletImpl::WalletImpl(NetworkType nettype, uint64_t kdf_rounds)
     , m_rebuildWalletCache(false)
     , m_is_connected(false)
     , m_refreshShouldRescan(false)
+    , m_customRescanHeightSet(false)
+    , m_customRescanFromBlockHeight(0)
 {
     m_wallet.reset(new tools::wallet2(static_cast<cryptonote::network_type>(nettype), kdf_rounds, true));
     m_history.reset(new TransactionHistoryImpl(this));
@@ -1260,6 +1262,19 @@ void WalletImpl::rescanBlockchainAsync()
         return;
     m_refreshShouldRescan = true;
     refreshAsync();
+}
+
+bool WalletImpl::rescanBlockchainAsyncFromHeight(uint64_t height)
+{
+    if (checkBackgroundSync("cannot rescan blockchain"))
+        return false;
+
+    clearStatus();
+    m_customRescanFromBlockHeight = height;
+    m_customRescanHeightSet = true;
+    m_refreshShouldRescan = true;
+    refreshAsync();
+    return status() == Status_Ok;
 }
 
 void WalletImpl::setAutoRefreshInterval(int millis)
@@ -2591,8 +2606,27 @@ void WalletImpl::doRefresh()
         // Syncing daemon and refreshing wallet simultaneously is very resource intensive.
         // Disable refresh if wallet is disconnected or daemon isn't synced.
         if (m_wallet->light_wallet() || daemonSynced()) {
-            if(rescan)
+            const bool customRescan = rescan && m_customRescanHeightSet.load();
+            if (customRescan) {
+                // Use the requested height only for this one rescan. The wallet's
+                // stored recovery/refresh height is restored before returning.
+                const uint64_t originalHeight = m_wallet->get_refresh_from_block_height();
+                const uint64_t customHeight = m_customRescanFromBlockHeight.load();
+                m_wallet->set_refresh_from_block_height(customHeight);
+                try {
+                    // Avoid the refresh built into rescan_blockchain(), so the
+                    // explicit refresh below starts from customHeight exactly.
+                    m_wallet->rescan_blockchain(false, false);
+                    m_wallet->refresh(trustedDaemon());
+                } catch (...) {
+                    m_wallet->set_refresh_from_block_height(originalHeight);
+                    throw;
+                }
+                m_wallet->set_refresh_from_block_height(originalHeight);
+                m_customRescanHeightSet = false;
+            } else if (rescan) {
                 m_wallet->rescan_blockchain(false);
+            }
             m_wallet->refresh(trustedDaemon());
             m_synchronized = m_wallet->is_synced();
             // assuming if we have empty history, it wasn't initialized yet
