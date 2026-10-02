@@ -2679,7 +2679,12 @@ bool WalletImpl::doInit(const string &daemon_address, const std::string &proxy_a
     // in case new wallet, this will force fast-refresh (pulling hashes instead of blocks)
     // If daemon isn't synced a calculated block height will be used instead
     //TODO: Handle light wallet scenario where block height = 0.
-    if (isNewWallet() && daemonSynced()) {
+    // Never replace an explicit wallet restore/sync height when reconnecting.
+    // After a rescan the temporary blockchain height can be 1, which makes
+    // isNewWallet() true even though the wallet already has a user-selected
+    // refresh height. Only apply the fast-sync shortcut when no height exists.
+    if (isNewWallet() && daemonSynced() &&
+        m_wallet->get_refresh_from_block_height() == 0) {
         LOG_PRINT_L2(__FUNCTION__ << ":New Wallet - fast refresh until " << daemonBlockChainHeight());
         m_wallet->set_refresh_from_block_height(daemonBlockChainHeight());
     }
