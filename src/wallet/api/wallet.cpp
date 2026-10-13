@@ -2700,20 +2700,23 @@ void WalletImpl::stopRefresh()
 void WalletImpl::pauseRefresh()
 {
     LOG_PRINT_L2(__FUNCTION__ << ": refresh paused...");
+
+    // Follow LOCK_REFRESH's shutdown order: stop the in-flight wallet2 refresh
+    // before waiting on the refresh-thread locks. A mutex-only barrier can wait
+    // indefinitely on a slow daemon request because doRefresh() holds both locks
+    // for the full native refresh and listener callback.
     if (!m_refreshThreadDone) {
-        // Disable future refresh-loop iterations first.
         m_refreshEnabled = false;
     }
+    m_wallet->stop();
+    m_refreshCV.notify_one();
 
-    // Disabling the loop alone does not stop a refresh already in progress.
-    // doRefresh() holds m_refreshMutex2 through its native work and refreshed()
-    // listener callback. Taking this lock waits for that complete refresh/callback
-    // chain to leave before a caller starts a wallet rescan or mutates scan state.
-    // Do not call pauseRefresh() from a wallet listener callback: that callback is
-    // itself running inside doRefresh() and would wait on its own lock.
-    {
-        boost::lock_guard<boost::mutex> refreshLock(m_refreshMutex2);
-    }
+    // Match refreshThreadFunc's lock order. Once these locks are acquired, the
+    // previous refresh and its callback have exited; callers may safely queue
+    // the requested custom-height rescan. This method must not be called from
+    // a wallet listener callback, which executes inside doRefresh().
+    boost::mutex::scoped_lock refreshLoopLock(m_refreshMutex);
+    boost::mutex::scoped_lock refreshWorkLock(m_refreshMutex2);
 }
 
 
