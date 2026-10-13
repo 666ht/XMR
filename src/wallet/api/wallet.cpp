@@ -2700,9 +2700,19 @@ void WalletImpl::stopRefresh()
 void WalletImpl::pauseRefresh()
 {
     LOG_PRINT_L2(__FUNCTION__ << ": refresh paused...");
-    // TODO synchronize access
     if (!m_refreshThreadDone) {
+        // Disable future refresh-loop iterations first.
         m_refreshEnabled = false;
+    }
+
+    // Disabling the loop alone does not stop a refresh already in progress.
+    // doRefresh() holds m_refreshMutex2 through its native work and refreshed()
+    // listener callback. Taking this lock waits for that complete refresh/callback
+    // chain to leave before a caller starts a wallet rescan or mutates scan state.
+    // Do not call pauseRefresh() from a wallet listener callback: that callback is
+    // itself running inside doRefresh() and would wait on its own lock.
+    {
+        boost::lock_guard<boost::mutex> refreshLock(m_refreshMutex2);
     }
 }
 
