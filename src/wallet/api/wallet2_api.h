@@ -763,9 +763,14 @@ struct Wallet
     */
     virtual void startRefresh() = 0;
    /**
-    * @brief pauseRefresh - pause refresh thread
+    * @brief pauseRefresh - pause refresh thread and wait for active work to exit
     */
     virtual void pauseRefresh() = 0;
+   /**
+    * @brief cancelCurrentOperation - non-blocking cancellation request for a
+    *        newer explicit UI operation. Does not wait for native work to exit.
+    */
+    virtual void cancelCurrentOperation(uint64_t operationId) = 0;
 
     /**
      * @brief refresh - refreshes the wallet, updating transactions from daemon

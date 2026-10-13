@@ -2705,6 +2705,15 @@ void WalletImpl::stopRefresh()
     }
 }
 
+void WalletImpl::cancelCurrentOperation(uint64_t operationId)
+{
+    // This only signals cancellation. Never wait for refresh or daemon RPC
+    // locks here: a new operation must be able to cancel work while it unwinds.
+    m_refreshEnabled = false;
+    m_wallet->request_stop_refresh_for_operation(operationId);
+    m_refreshCV.notify_one();
+}
+
 void WalletImpl::pauseRefresh()
 {
     LOG_PRINT_L2(__FUNCTION__ << ": refresh paused...");

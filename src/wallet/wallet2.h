@@ -1106,12 +1106,22 @@ private:
     }
     void request_stop_refresh()
     {
-      // Each explicit stop supersedes any in-flight date/height query as well
-      // as the current refresh. Read-only daemon queries check this generation
-      // between RPC calls so a newer wallet action can take over promptly.
-      m_operationGeneration.fetch_add(1, std::memory_order_relaxed);
       boost::lock_guard<boost::mutex> lock(m_refreshControlMutex);
       m_refreshStopRequested = true;
+      m_operationGeneration.fetch_add(1, std::memory_order_relaxed);
+      m_run.store(false, std::memory_order_relaxed);
+    }
+    // Non-blocking cancellation entry point for explicit UI actions. Request IDs
+    // increase monotonically in WalletState; ignore late cancellation signals
+    // from an operation that has already been superseded by a newer one.
+    void request_stop_refresh_for_operation(uint64_t operation_id)
+    {
+      boost::lock_guard<boost::mutex> lock(m_refreshControlMutex);
+      if (operation_id <= m_lastUserOperationId)
+        return;
+      m_lastUserOperationId = operation_id;
+      m_refreshStopRequested = true;
+      m_operationGeneration.fetch_add(1, std::memory_order_relaxed);
       m_run.store(false, std::memory_order_relaxed);
     }
     uint64_t operation_generation() const
@@ -2053,6 +2063,8 @@ private:
     // Invalidates read-only date/height lookups when a newer wallet operation
     // requests cancellation. Not serialized into the wallet file.
     std::atomic<uint64_t> m_operationGeneration{0};
+    // Protected by m_refreshControlMutex. Reject stale UI cancellation requests.
+    uint64_t m_lastUserOperationId;
     boost::mutex m_refreshControlMutex;
     bool m_refreshStopRequested;
 
