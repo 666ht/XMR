@@ -1114,15 +1114,16 @@ private:
     // Non-blocking cancellation entry point for explicit UI actions. Request IDs
     // increase monotonically in WalletState; ignore late cancellation signals
     // from an operation that has already been superseded by a newer one.
-    void request_stop_refresh_for_operation(uint64_t operation_id)
+    bool request_stop_refresh_for_operation(uint64_t operation_id)
     {
       boost::lock_guard<boost::mutex> lock(m_refreshControlMutex);
       if (operation_id <= m_lastUserOperationId)
-        return;
+        return false;
       m_lastUserOperationId = operation_id;
       m_refreshStopRequested = true;
       m_operationGeneration.fetch_add(1, std::memory_order_relaxed);
       m_run.store(false, std::memory_order_relaxed);
+      return true;
     }
     uint64_t operation_generation() const
     {
