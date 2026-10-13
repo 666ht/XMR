@@ -1233,6 +1233,9 @@ bool WalletImpl::synchronized() const
 bool WalletImpl::refresh()
 {
     clearStatus();
+    // An explicit synchronous refresh is a new request, unlike a queued refresh
+    // that is being cancelled by pauseRefresh().
+    m_wallet->request_start_refresh();
     //TODO: make doRefresh return bool to know whether the error occured during refresh or not
     //otherwise one may try, say, to send transaction, transfer fails and this method returns false
     doRefresh();
@@ -1251,6 +1254,8 @@ bool WalletImpl::rescanBlockchain()
     if (checkBackgroundSync("cannot rescan blockchain"))
         return false;
     clearStatus();
+    // A synchronous rescan is an explicit new operation.
+    m_wallet->request_start_refresh();
     m_refreshShouldRescan = true;
     doRefresh();
     return status() == Status_Ok;
@@ -2678,6 +2683,9 @@ void WalletImpl::doRefresh()
 
 void WalletImpl::startRefresh()
 {
+    // Explicit resume clears a pending native pause before waking the refresh
+    // worker. Calls after a custom-height rescan are the handoff to its scan.
+    m_wallet->request_start_refresh();
     if (!m_refreshEnabled) {
         LOG_PRINT_L2(__FUNCTION__ << ": refresh started/resumed...");
         m_refreshEnabled = true;

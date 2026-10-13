@@ -1205,6 +1205,7 @@ wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended, std
   m_http_client(http_client_factory->create()),
   m_upper_transaction_weight_limit(0),
   m_run(true),
+  m_refreshStopRequested(false),
   m_callback(0),
   m_trusted_daemon(false),
   m_nettype(nettype),
@@ -4189,10 +4190,19 @@ void wallet2::refresh(bool trusted_daemon, uint64_t start_height, uint64_t & blo
   std::shared_ptr<std::map<std::pair<uint64_t, uint64_t>, size_t>> output_tracker_cache;
   hw::device &hwdev = m_account.get_device();
 
-  // Mark this refresh active before the first daemon RPC. A stop request may
-  // arrive while get_short_chain_history() is waiting for the daemon; never
-  // overwrite that cancellation after the RPC returns.
-  m_run.store(true, std::memory_order_relaxed);
+  // Claim the refresh start under the same lock used by request_stop_refresh().
+  // If a pause arrived before this queued refresh began, do not let this call
+  // restart it. If a pause arrives after this block, it sets m_run=false and
+  // cannot be overwritten by a later store inside this refresh function.
+  {
+    boost::lock_guard<boost::mutex> refresh_control_lock(m_refreshControlMutex);
+    if (m_refreshStopRequested)
+    {
+      LOG_PRINT_L1("Refresh skipped because a pause was requested before it started");
+      return;
+    }
+    m_run.store(true, std::memory_order_relaxed);
+  }
 
   // pull the first set of blocks
   get_short_chain_history(short_chain_history, (m_first_refresh_done || trusted_daemon) ? 1 : FIRST_REFRESH_GRANULARITY);

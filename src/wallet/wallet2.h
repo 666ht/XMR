@@ -1096,9 +1096,20 @@ private:
       const std::string &proxy = "");
     bool set_proxy(const std::string &address);
 
-    // Request cancellation of the active blockchain refresh without shutting down
-    // the message store; pause/resume must be reusable.
-    void request_stop_refresh() { m_run.store(false, std::memory_order_relaxed); }
+    // Serialize refresh start with cancellation so a stop request cannot be
+    // overwritten when a queued refresh enters wallet2::refresh().
+    void request_start_refresh()
+    {
+      boost::lock_guard<boost::mutex> lock(m_refreshControlMutex);
+      m_refreshStopRequested = false;
+      m_run.store(true, std::memory_order_relaxed);
+    }
+    void request_stop_refresh()
+    {
+      boost::lock_guard<boost::mutex> lock(m_refreshControlMutex);
+      m_refreshStopRequested = true;
+      m_run.store(false, std::memory_order_relaxed);
+    }
     void stop() { request_stop_refresh(); m_message_store.stop(); }
 
     i_wallet2_callback* callback() const { return m_callback; }
@@ -2031,6 +2042,8 @@ private:
     serializable_unordered_map<crypto::public_key, crypto::key_image> m_cold_key_images;
 
     std::atomic<bool> m_run;
+    boost::mutex m_refreshControlMutex;
+    bool m_refreshStopRequested;
 
     boost::recursive_mutex m_daemon_rpc_mutex;
 
