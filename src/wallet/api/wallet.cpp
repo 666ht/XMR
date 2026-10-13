@@ -2708,7 +2708,9 @@ void WalletImpl::pauseRefresh()
     if (!m_refreshThreadDone) {
         m_refreshEnabled = false;
     }
-    m_wallet->stop();
+    // This is a reusable refresh pause, not wallet shutdown. Do not stop the
+    // wallet message store when switching from normal sync to a custom rescan.
+    m_wallet->request_stop_refresh();
     m_refreshCV.notify_one();
 
     // Match refreshThreadFunc's lock order. Once these locks are acquired, the

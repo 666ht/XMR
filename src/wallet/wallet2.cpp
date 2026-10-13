@@ -4189,14 +4189,29 @@ void wallet2::refresh(bool trusted_daemon, uint64_t start_height, uint64_t & blo
   std::shared_ptr<std::map<std::pair<uint64_t, uint64_t>, size_t>> output_tracker_cache;
   hw::device &hwdev = m_account.get_device();
 
+  // Mark this refresh active before the first daemon RPC. A stop request may
+  // arrive while get_short_chain_history() is waiting for the daemon; never
+  // overwrite that cancellation after the RPC returns.
+  m_run.store(true, std::memory_order_relaxed);
+
   // pull the first set of blocks
   get_short_chain_history(short_chain_history, (m_first_refresh_done || trusted_daemon) ? 1 : FIRST_REFRESH_GRANULARITY);
-  m_run.store(true, std::memory_order_relaxed);
+
+  // If the refresh was cancelled during the first daemon request, do not start
+  // a fast refresh or issue another request for chain history.
+  if(!m_run.load(std::memory_order_relaxed))
+    return;
+
   if (start_height > m_blockchain.size() || m_refresh_from_block_height > m_blockchain.size() || m_skip_to_height > m_blockchain.size()) {
     if (!start_height)
       start_height = std::max(m_refresh_from_block_height, m_skip_to_height);;
     // we can shortcut by only pulling hashes up to the start_height
     fast_refresh(start_height, blocks_start_height, short_chain_history);
+
+    // A cancellation during fast refresh must not trigger a second daemon RPC.
+    if(!m_run.load(std::memory_order_relaxed))
+      return;
+
     // regenerate the history now that we've got a full set of hashes
     short_chain_history.clear();
     get_short_chain_history(short_chain_history, (m_first_refresh_done || trusted_daemon) ? 1 : FIRST_REFRESH_GRANULARITY);

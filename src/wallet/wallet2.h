@@ -1096,7 +1096,7 @@ private:
       const std::string &proxy = "");
     bool set_proxy(const std::string &address);
 
-    void stop() { m_run.store(false, std::memory_order_relaxed); m_message_store.stop(); }
+    // Request cancellation of the active blockchain refresh without shutting down\n    // the message store; pause/resume must be reusable.\n    void request_stop_refresh() { m_run.store(false, std::memory_order_relaxed); }\n    void stop() { request_stop_refresh(); m_message_store.stop(); }
 
     i_wallet2_callback* callback() const { return m_callback; }
     void callback(i_wallet2_callback* callback) { m_callback = callback; }
