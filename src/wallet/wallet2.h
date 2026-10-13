@@ -1106,9 +1106,17 @@ private:
     }
     void request_stop_refresh()
     {
+      // Each explicit stop supersedes any in-flight date/height query as well
+      // as the current refresh. Read-only daemon queries check this generation
+      // between RPC calls so a newer wallet action can take over promptly.
+      m_operationGeneration.fetch_add(1, std::memory_order_relaxed);
       boost::lock_guard<boost::mutex> lock(m_refreshControlMutex);
       m_refreshStopRequested = true;
       m_run.store(false, std::memory_order_relaxed);
+    }
+    uint64_t operation_generation() const
+    {
+      return m_operationGeneration.load(std::memory_order_relaxed);
     }
     void stop() { request_stop_refresh(); m_message_store.stop(); }
 
@@ -2042,6 +2050,9 @@ private:
     serializable_unordered_map<crypto::public_key, crypto::key_image> m_cold_key_images;
 
     std::atomic<bool> m_run;
+    // Invalidates read-only date/height lookups when a newer wallet operation
+    // requests cancellation. Not serialized into the wallet file.
+    std::atomic<uint64_t> m_operationGeneration{0};
     boost::mutex m_refreshControlMutex;
     bool m_refreshStopRequested;
 
