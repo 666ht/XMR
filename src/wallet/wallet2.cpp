@@ -1205,6 +1205,7 @@ wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended, std
   m_http_client(http_client_factory->create()),
   m_upper_transaction_weight_limit(0),
   m_run(true),
+  m_operationGeneration(0),
   m_refreshStopRequested(false),
   m_callback(0),
   m_trusted_daemon(false),
@@ -15883,18 +15884,33 @@ uint64_t wallet2::get_blockchain_height_by_date(uint16_t year, uint8_t month, ui
 }
 
 uint64_t wallet2::get_block_timestamp(uint64_t height) const {
+  const uint64_t operation_generation = this->operation_generation();
   cryptonote::block_header_response block_header;
   const boost::optional<std::string> result = m_node_rpc_proxy.get_block_header_by_height(height, block_header);
+  if (this->operation_generation() != operation_generation)
+    throw std::runtime_error("Block timestamp query cancelled by a newer wallet operation");
   if (result) throw std::runtime_error(*result);
   return block_header.timestamp;
 }
 
 uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) {
+  // A newer explicit wallet operation increments this generation. Checking it
+  // between daemon RPCs makes the binary-search query yield instead of continuing
+  // to issue requests after the user has chosen a different operation.
+  const uint64_t operation_generation = this->operation_generation();
+  const auto ensure_query_current = [this, operation_generation]() {
+    if (this->operation_generation() != operation_generation)
+      throw std::runtime_error("Block date query cancelled by a newer wallet operation");
+  };
+
+  ensure_query_current();
   uint32_t version;
   if (!check_connection(&version))
   {
+    ensure_query_current();
     throw std::runtime_error("failed to connect to daemon: " + get_daemon_address());
   }
+  ensure_query_current();
   if (version < MAKE_CORE_RPC_VERSION(1, 6))
   {
     throw std::runtime_error("this function requires RPC version 1.6 or higher");
@@ -15902,6 +15918,7 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
 
   std::string err;
   const uint64_t daemon_height = get_daemon_blockchain_height(err);
+  ensure_query_current();
   if (!err.empty() || daemon_height == 0)
     throw std::runtime_error("failed to get blockchain height");
 
@@ -15910,10 +15927,13 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
 
   cryptonote::block_header_response header_min;
   cryptonote::block_header_response header_max;
+  ensure_query_current();
   if (m_node_rpc_proxy.get_block_header_by_height(height_min, header_min))
     throw std::runtime_error("failed to get block timestamp");
+  ensure_query_current();
   if (m_node_rpc_proxy.get_block_header_by_height(height_max, header_max))
     throw std::runtime_error("failed to get block timestamp");
+  ensure_query_current();
 
   if (timestamp_target <= header_min.timestamp)
     return height_min;
@@ -15922,10 +15942,12 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
 
   while (height_min < height_max)
   {
+    ensure_query_current();
     const uint64_t height_mid = height_min + (height_max - height_min) / 2;
     cryptonote::block_header_response header_mid;
     if (m_node_rpc_proxy.get_block_header_by_height(height_mid, header_mid))
       throw std::runtime_error("failed to get block timestamp");
+    ensure_query_current();
 
     if (header_mid.timestamp < timestamp_target)
       height_min = height_mid + 1;
@@ -15933,6 +15955,7 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
       height_max = height_mid;
   }
 
+  ensure_query_current();
   return height_min;
 }
 //----------------------------------------------------------------------------------------------------
