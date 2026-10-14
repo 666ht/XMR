@@ -2712,6 +2712,10 @@ void WalletImpl::cancelCurrentOperation(uint64_t operationId)
     // A stale request must not flip m_refreshEnabled after a newer operation
     // has already been accepted by wallet2.
     if (m_wallet->request_stop_refresh_for_operation(operationId)) {
+        // A newer explicit action supersedes any rescan still queued in the
+        // refresh worker. pauseRefresh() drains any in-flight work and repeats
+        // this cleanup under the native refresh locks before the new action runs.
+        m_refreshShouldRescan = false;
         m_refreshEnabled = false;
         m_refreshCV.notify_one();
     }
@@ -2739,6 +2743,13 @@ void WalletImpl::pauseRefresh()
     // a wallet listener callback, which executes inside doRefresh().
     boost::mutex::scoped_lock refreshLoopLock(m_refreshMutex);
     boost::mutex::scoped_lock refreshWorkLock(m_refreshMutex2);
+
+    // The lock barrier guarantees doRefresh() and its listener callback have
+    // exited. Discard any rescan re-queued by an older operation while it was
+    // unwinding (for example, because the daemon was not fully synced).
+    // The next explicit reset will install its own height/request after this.
+    m_refreshShouldRescan = false;
+    m_customRescanHeightSet = false;
 }
 
 
