@@ -273,6 +273,16 @@ uint64_t WalletManagerImpl::blockchainHeight()
     return ires.height;
 }
 
+uint64_t WalletManagerImpl::blockchainTimestamp()
+{
+    cryptonote::COMMAND_RPC_GET_LAST_BLOCK_HEADER::request ireq;
+    cryptonote::COMMAND_RPC_GET_LAST_BLOCK_HEADER::response ires;
+
+    if (!epee::net_utils::invoke_http_json("/getlastblockheader", ireq, ires, m_http_client))
+      return 0;
+    return ires.block_header.timestamp;
+}
+
 uint64_t WalletManagerImpl::blockchainTargetHeight()
 {
     cryptonote::COMMAND_RPC_GET_INFO::request ireq;

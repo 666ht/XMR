@@ -93,6 +93,7 @@ namespace polyseed {
             }
 
             void create(feature_type features);
+            void create(feature_type features, uint64_t birthday_timestamp);
 
             void load(polyseed_storage storage);
 

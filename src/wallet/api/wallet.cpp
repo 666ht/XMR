@@ -890,13 +890,13 @@ std::vector<std::pair<std::string, std::string>> Wallet::getPolyseedLanguages()
     return languages;
 }
 
-bool Wallet::createPolyseed(std::string &seed_words, std::string &err, const std::string &language)
+bool Wallet::createPolyseed(std::string &seed_words, std::string &err, const std::string &language, uint64_t birthday_timestamp)
 {
     epee::wipeable_string seed_words_epee(seed_words.c_str(), seed_words.size());
     
     try {
         polyseed::data polyseed(POLYSEED_COIN);
-        polyseed.create(0);
+        polyseed.create(0, birthday_timestamp);
         polyseed.encode(polyseed::get_lang_by_name(language), seed_words_epee);
 
         seed_words.assign(seed_words_epee.data(), seed_words_epee.size());

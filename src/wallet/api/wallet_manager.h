@@ -94,6 +94,7 @@ public:
     void setDaemonAddress(const std::string &address) override;
     bool connected(uint32_t *version = NULL) override;
     uint64_t blockchainHeight() override;
+    uint64_t blockchainTimestamp() override;
     uint64_t blockchainTargetHeight() override;
     uint64_t networkDifficulty() override;
     double miningHashRate() override;

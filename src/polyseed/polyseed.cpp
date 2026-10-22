@@ -35,8 +35,23 @@
 #include <cstring>
 #include <algorithm>
 #include <array>
+#include <ctime>
 
 namespace polyseed {
+
+    namespace {
+        // Per-thread override scopes the daemon-derived birthday to one seed operation.
+        // Zero preserves normal system-time behavior.
+        thread_local uint64_t birthday_timestamp_override = 0;
+
+        uint64_t get_polyseed_timestamp() {
+            if (birthday_timestamp_override != 0) {
+                return birthday_timestamp_override;
+            }
+            const std::time_t now = std::time(nullptr);
+            return now > 0 ? static_cast<uint64_t>(now) : 0;
+        }
+    }
 
     inline size_t utf8_norm(const char* str, polyseed_str norm, utf8proc_option_t options) {
       utf8proc_int32_t buffer[POLYSEED_STR_SIZE];
@@ -85,7 +100,7 @@ namespace polyseed {
         pd.memzero = &sodium_memzero;
         pd.u8_nfc = &utf8_nfc;
         pd.u8_nfkd = &utf8_nfkd;
-        pd.time = nullptr;
+        pd.time = &get_polyseed_timestamp;
         pd.alloc = nullptr;
         pd.free = nullptr;
 
@@ -139,8 +154,15 @@ namespace polyseed {
     }
 
     void data::create(feature_type features) {
+        create(features, 0);
+    }
+
+    void data::create(feature_type features, uint64_t birthday_timestamp) {
         check_init();
-        auto status = polyseed_create(features, &m_data);
+        const uint64_t previous_timestamp = birthday_timestamp_override;
+        birthday_timestamp_override = birthday_timestamp;
+        const auto status = polyseed_create(features, &m_data);
+        birthday_timestamp_override = previous_timestamp;
         if (status != POLYSEED_OK) {
             throw get_error(status);
         }

@@ -755,7 +755,7 @@ struct Wallet
     static void error(const std::string &category, const std::string &str);
 
     virtual bool getPolyseed(std::string &seed, std::string &passphrase) const = 0;
-    static bool createPolyseed(std::string &seed_words, std::string &err, const std::string &language = "English");
+    static bool createPolyseed(std::string &seed_words, std::string &err, const std::string &language = "English", uint64_t birthday_timestamp = 0);
     static std::vector<std::pair<std::string, std::string>> getPolyseedLanguages();
 
    /**
@@ -1452,6 +1452,9 @@ struct WalletManager
 
     //! returns current blockchain height
     virtual uint64_t blockchainHeight() = 0;
+
+    //! Returns the timestamp of the daemon's latest block.
+    virtual uint64_t blockchainTimestamp() { return 0; }
 
     //! returns current blockchain target height
     virtual uint64_t blockchainTargetHeight() = 0;
