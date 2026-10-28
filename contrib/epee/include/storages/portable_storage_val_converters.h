@@ -38,6 +38,9 @@
 
 #include <boost/lexical_cast.hpp>
 #include <boost/numeric/conversion/bounds.hpp>
+#include <string>
+#include <limits>
+#include <cstdint>
 #include <typeinfo>
 #include <iomanip>
 
@@ -150,8 +153,23 @@ POP_WARNINGS
       {
         MTRACE("Converting std::string to uint64_t. Source: " << from);
         // String only contains digits
-        if(std::all_of(from.begin(), from.end(), epee::misc_utils::parse::isdigit))
-          to = boost::lexical_cast<uint64_t>(from);
+        if (std::all_of(from.begin(), from.end(), epee::misc_utils::parse::isdigit))
+        {
+          if (from.empty())
+            ASSERT_AND_THROW_WRONG_CONVERSION();
+
+          uint64_t value = 0;
+          for (const char c : from)
+          {
+            if (c < '0' || c > '9')
+              ASSERT_AND_THROW_WRONG_CONVERSION();
+            const uint64_t digit = c - '0';
+            if (value > (std::numeric_limits<uint64_t>::max() - digit) / 10)
+              ASSERT_AND_THROW_WRONG_CONVERSION();
+            value = value * 10 + digit;
+          }
+          to = value;
+        }
         // MyMonero ISO 8061 timestamp (2017-05-06T16:27:06Z)
         else if (boost::regex_match (from, boost::regex("\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\dZ")))
         {
