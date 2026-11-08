@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/recursive_mutex.hpp>
@@ -42,7 +43,7 @@ namespace tools
 class NodeRPCProxy
 {
 public:
-  NodeRPCProxy(epee::net_utils::http::abstract_http_client &http_client, rpc_payment_state_t &rpc_payment_state, boost::recursive_mutex &mutex);
+  NodeRPCProxy(epee::net_utils::http::abstract_http_client &http_client, rpc_payment_state_t &rpc_payment_state, boost::recursive_mutex &mutex, std::chrono::milliseconds rpc_timeout = std::chrono::minutes(3) + std::chrono::seconds(30));
 
   void set_client_secret_key(const crypto::secret_key &skey) { m_client_id_secret_key = skey; }
   void invalidate();
@@ -80,6 +81,7 @@ private:
   epee::net_utils::http::abstract_http_client &m_http_client;
   rpc_payment_state_t &m_rpc_payment_state;
   boost::recursive_mutex &m_daemon_rpc_mutex;
+  const std::chrono::milliseconds m_rpc_timeout;
   crypto::secret_key m_client_id_secret_key;
   bool m_offline;
 

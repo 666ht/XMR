@@ -51,12 +51,11 @@ using namespace epee;
 namespace tools
 {
 
-static const std::chrono::seconds rpc_timeout = std::chrono::minutes(3) + std::chrono::seconds(30);
-
-NodeRPCProxy::NodeRPCProxy(epee::net_utils::http::abstract_http_client &http_client, rpc_payment_state_t &rpc_payment_state, boost::recursive_mutex &mutex)
+NodeRPCProxy::NodeRPCProxy(epee::net_utils::http::abstract_http_client &http_client, rpc_payment_state_t &rpc_payment_state, boost::recursive_mutex &mutex, std::chrono::milliseconds rpc_timeout)
   : m_http_client(http_client)
   , m_rpc_payment_state(rpc_payment_state)
   , m_daemon_rpc_mutex(mutex)
+  , m_rpc_timeout(rpc_timeout)
   , m_offline(false)
 {
   invalidate();
@@ -101,7 +100,7 @@ boost::optional<std::string> NodeRPCProxy::get_rpc_version(uint32_t &rpc_version
     cryptonote::COMMAND_RPC_GET_VERSION::response resp_t = AUTO_VAL_INIT(resp_t);
     {
       const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
-      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_version", req_t, resp_t, m_http_client, rpc_timeout);
+      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_version", req_t, resp_t, m_http_client, m_rpc_timeout);
       RETURN_ON_RPC_RESPONSE_ERROR(r, epee::json_rpc::error{}, resp_t, "get_version");
     }
 
@@ -149,7 +148,7 @@ boost::optional<std::string> NodeRPCProxy::get_info()
       const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
       uint64_t pre_call_credits = m_rpc_payment_state.credits;
       req_t.client = cryptonote::make_rpc_payment_signature(m_client_id_secret_key);
-      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_info", req_t, resp_t, m_http_client, rpc_timeout);
+      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_info", req_t, resp_t, m_http_client, m_rpc_timeout);
       RETURN_ON_RPC_RESPONSE_ERROR(r, epee::json_rpc::error{}, resp_t, "get_info");
       check_rpc_cost(m_rpc_payment_state, "get_info", resp_t.credits, pre_call_credits, COST_PER_GET_INFO);
     }
@@ -229,7 +228,7 @@ boost::optional<std::string> NodeRPCProxy::get_earliest_height(uint8_t version, 
       const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
       uint64_t pre_call_credits = m_rpc_payment_state.credits;
       req_t.client = cryptonote::make_rpc_payment_signature(m_client_id_secret_key);
-      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "hard_fork_info", req_t, resp_t, m_http_client, rpc_timeout);
+      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "hard_fork_info", req_t, resp_t, m_http_client, m_rpc_timeout);
       RETURN_ON_RPC_RESPONSE_ERROR(r, epee::json_rpc::error{}, resp_t, "hard_fork_info");
       check_rpc_cost(m_rpc_payment_state, "hard_fork_info", resp_t.credits, pre_call_credits, COST_PER_HARD_FORK_INFO);
     }
@@ -261,7 +260,7 @@ boost::optional<std::string> NodeRPCProxy::get_dynamic_base_fee_estimate_2021_sc
       const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
       uint64_t pre_call_credits = m_rpc_payment_state.credits;
       req_t.client = cryptonote::make_rpc_payment_signature(m_client_id_secret_key);
-      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_fee_estimate", req_t, resp_t, m_http_client, rpc_timeout);
+      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_fee_estimate", req_t, resp_t, m_http_client, m_rpc_timeout);
       RETURN_ON_RPC_RESPONSE_ERROR(r, epee::json_rpc::error{}, resp_t, "get_fee_estimate");
       check_rpc_cost(m_rpc_payment_state, "get_fee_estimate", resp_t.credits, pre_call_credits, COST_PER_FEE_ESTIMATE);
     }
@@ -307,7 +306,7 @@ boost::optional<std::string> NodeRPCProxy::get_fee_quantization_mask(uint64_t &f
       const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
       uint64_t pre_call_credits = m_rpc_payment_state.credits;
       req_t.client = cryptonote::make_rpc_payment_signature(m_client_id_secret_key);
-      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_fee_estimate", req_t, resp_t, m_http_client, rpc_timeout);
+      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_fee_estimate", req_t, resp_t, m_http_client, m_rpc_timeout);
       RETURN_ON_RPC_RESPONSE_ERROR(r, epee::json_rpc::error{}, resp_t, "get_fee_estimate");
       check_rpc_cost(m_rpc_payment_state, "get_fee_estimate", resp_t.credits, pre_call_credits, COST_PER_FEE_ESTIMATE);
     }
@@ -337,7 +336,7 @@ boost::optional<std::string> NodeRPCProxy::get_rpc_payment_info(bool mining, boo
     {
       const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
       req_t.client = cryptonote::make_rpc_payment_signature(m_client_id_secret_key);
-      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "rpc_access_info", req_t, resp_t, m_http_client, rpc_timeout);
+      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "rpc_access_info", req_t, resp_t, m_http_client, m_rpc_timeout);
       RETURN_ON_RPC_RESPONSE_ERROR(r, epee::json_rpc::error{}, resp_t, "rpc_access_info");
       m_rpc_payment_state.stale = false;
     }
@@ -412,7 +411,7 @@ boost::optional<std::string> NodeRPCProxy::get_transactions(const std::vector<cr
       const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
       uint64_t pre_call_credits = m_rpc_payment_state.credits;
       req_t.client = cryptonote::make_rpc_payment_signature(m_client_id_secret_key);
-      r = net_utils::invoke_http_json("/gettransactions", req_t, resp_t, m_http_client, rpc_timeout);
+      r = net_utils::invoke_http_json("/gettransactions", req_t, resp_t, m_http_client, m_rpc_timeout);
       if (r && resp_t.status == CORE_RPC_STATUS_OK)
         check_rpc_cost(m_rpc_payment_state, "/gettransactions", resp_t.credits, pre_call_credits, resp_t.txs.size() * COST_PER_TX);
     }
@@ -435,7 +434,7 @@ boost::optional<std::string> NodeRPCProxy::get_block_header_by_height(uint64_t h
     const boost::lock_guard<boost::recursive_mutex> lock{m_daemon_rpc_mutex};
     uint64_t pre_call_credits = m_rpc_payment_state.credits;
     req_t.client = cryptonote::make_rpc_payment_signature(m_client_id_secret_key);
-    bool r = net_utils::invoke_http_json_rpc("/json_rpc", "getblockheaderbyheight", req_t, resp_t, m_http_client, rpc_timeout);
+    bool r = net_utils::invoke_http_json_rpc("/json_rpc", "getblockheaderbyheight", req_t, resp_t, m_http_client, m_rpc_timeout);
     RETURN_ON_RPC_RESPONSE_ERROR(r, epee::json_rpc::error{}, resp_t, "getblockheaderbyheight");
     check_rpc_cost(m_rpc_payment_state, "getblockheaderbyheight", resp_t.credits, pre_call_credits, COST_PER_BLOCK_HEADER);
   }

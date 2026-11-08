@@ -1203,6 +1203,7 @@ void wallet_device_callback::on_progress(const hw::device_progress& event)
 
 wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended, std::unique_ptr<epee::net_utils::http::http_client_factory> http_client_factory):
   m_http_client(http_client_factory->create()),
+  m_date_query_http_client(http_client_factory->create()),
   m_upper_transaction_weight_limit(0),
   m_run(true),
   m_operationGeneration(0),
@@ -1257,6 +1258,7 @@ wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended, std
   m_multisig(false),
   m_multisig_threshold(0),
   m_node_rpc_proxy(*m_http_client, m_rpc_payment_state, m_daemon_rpc_mutex),
+  m_date_query_node_rpc_proxy(*m_date_query_http_client, m_date_query_rpc_payment_state, m_date_query_rpc_mutex, std::chrono::seconds(15)),
   m_account_public_address{crypto::null_pkey, crypto::null_pkey},
   m_subaddress_lookahead_major(SUBADDRESS_LOOKAHEAD_MAJOR),
   m_subaddress_lookahead_minor(SUBADDRESS_LOOKAHEAD_MINOR),
@@ -1421,18 +1423,35 @@ bool wallet2::set_daemon(std::string daemon_address, boost::optional<epee::net_u
 
   const std::string address = get_daemon_address();
   MINFO("setting daemon to " << address);
-  bool ret =  m_http_client->set_server(address, get_daemon_login(), std::move(ssl_options));
+
+  bool query_ret = false;
+  {
+    boost::lock_guard<boost::recursive_mutex> query_lock(m_date_query_rpc_mutex);
+    if (m_date_query_http_client->is_connected())
+      m_date_query_http_client->disconnect();
+    query_ret = m_date_query_http_client->set_server(address, get_daemon_login(), ssl_options);
+    if (!query_ret)
+      return false;
+    m_date_query_node_rpc_proxy.invalidate();
+    m_date_query_node_rpc_proxy.set_offline(m_offline);
+  }
+
+  bool ret = m_http_client->set_server(address, get_daemon_login(), std::move(ssl_options));
   if (ret)
   {
     CRITICAL_REGION_LOCAL(default_daemon_address_lock);
     default_daemon_address = address;
   }
-  return ret;
+  return ret && query_ret;
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::set_proxy(const std::string &address)
 {
-  return m_http_client->set_proxy(address);
+  const bool sync_proxy_set = m_http_client->set_proxy(address);
+  boost::lock_guard<boost::recursive_mutex> lock(m_date_query_rpc_mutex);
+  const bool query_proxy_set = m_date_query_http_client->set_proxy(address);
+  m_date_query_node_rpc_proxy.invalidate();
+  return sync_proxy_set && query_proxy_set;
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::init(std::string daemon_address, boost::optional<epee::net_utils::http::login> daemon_login, const std::string &proxy_address, uint64_t upper_transaction_weight_limit, bool trusted_daemon, epee::net_utils::ssl_options_t ssl_options)
@@ -6521,14 +6540,14 @@ bool wallet2::check_version(uint32_t *version, bool *wallet_is_outdated, bool *d
 
   // check wallet compatibility with daemon's hard fork version
   if (!m_allow_mismatched_daemon_version)
-    if (!check_hard_fork_version(m_nettype, daemon_hard_forks, height, target_height, wallet_is_outdated, daemon_is_outdated))
+    if (!check_hard_fork_version(m_nettype, daemon_hard_forks, height, target_height, wallet_is_outdated, daemon_is_outdated, m_node_rpc_proxy))
       return false;
 
   m_rpc_version = rpc_version;
   return true;
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::check_hard_fork_version(cryptonote::network_type nettype, const std::vector<std::pair<uint8_t, uint64_t>> &daemon_hard_forks, const uint64_t height, const uint64_t target_height, bool *wallet_is_outdated, bool *daemon_is_outdated)
+bool wallet2::check_hard_fork_version(cryptonote::network_type nettype, const std::vector<std::pair<uint8_t, uint64_t>> &daemon_hard_forks, const uint64_t height, const uint64_t target_height, bool *wallet_is_outdated, bool *daemon_is_outdated, NodeRPCProxy &rpc_proxy)
 {
   const size_t wallet_num_hard_forks = nettype == TESTNET ? num_testnet_hard_forks
     : nettype == STAGENET ? num_stagenet_hard_forks : num_mainnet_hard_forks;
@@ -6573,7 +6592,7 @@ bool wallet2::check_hard_fork_version(cryptonote::network_type nettype, const st
     // Non-updated daemons won't return daemon_hard_forks in response to
     // get_version. Fall back to extra call to get_hard_fork_info by version.
     uint64_t daemon_fork_height;
-    get_hard_fork_info(wallet_num_hard_forks-1/* wallet expects "double fork" pattern */, daemon_fork_height);
+    rpc_proxy.get_earliest_height(wallet_num_hard_forks-1/* wallet expects "double fork" pattern */, daemon_fork_height);
     bool daemon_outdated = daemon_fork_height == std::numeric_limits<uint64_t>::max();
 
     if (daemon_is_outdated)
@@ -6603,9 +6622,16 @@ void wallet2::set_offline(bool offline)
   if (offline)
   {
     boost::lock_guard<boost::recursive_mutex> lock(m_daemon_rpc_mutex);
-    if(m_http_client->is_connected())
+    if (m_http_client->is_connected())
       m_http_client->disconnect();
   }
+
+  boost::lock_guard<boost::recursive_mutex> query_lock(m_date_query_rpc_mutex);
+  m_date_query_node_rpc_proxy.set_offline(offline);
+  m_date_query_http_client->set_auto_connect(!offline);
+  m_date_query_node_rpc_proxy.invalidate();
+  if (offline && m_date_query_http_client->is_connected())
+    m_date_query_http_client->disconnect();
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::generate_chacha_key_from_secret_keys(crypto::chacha_key &key) const
@@ -15885,9 +15911,10 @@ uint64_t wallet2::get_blockchain_height_by_date(uint16_t year, uint8_t month, ui
 }
 
 uint64_t wallet2::get_block_timestamp(uint64_t height) const {
+  boost::lock_guard<boost::recursive_mutex> query_lock(m_date_query_rpc_mutex);
   const uint64_t operation_generation = this->operation_generation();
   cryptonote::block_header_response block_header;
-  const boost::optional<std::string> result = m_node_rpc_proxy.get_block_header_by_height(height, block_header);
+  const boost::optional<std::string> result = m_date_query_node_rpc_proxy.get_block_header_by_height(height, block_header);
   if (this->operation_generation() != operation_generation)
     throw std::runtime_error("Block timestamp query cancelled by a newer wallet operation");
   if (result) throw std::runtime_error(*result);
@@ -15895,9 +15922,8 @@ uint64_t wallet2::get_block_timestamp(uint64_t height) const {
 }
 
 uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) {
-  // A newer explicit wallet operation increments this generation. Checking it
-  // between daemon RPCs makes the binary-search query yield instead of continuing
-  // to issue requests after the user has chosen a different operation.
+  // Use a dedicated read-only daemon transport so date queries never queue behind wallet refresh.
+  boost::lock_guard<boost::recursive_mutex> query_lock(m_date_query_rpc_mutex);
   const uint64_t operation_generation = this->operation_generation();
   const auto ensure_query_current = [this, operation_generation]() {
     if (this->operation_generation() != operation_generation)
@@ -15905,22 +15931,21 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
   };
 
   ensure_query_current();
-  uint32_t version;
-  if (!check_connection(&version))
-  {
-    ensure_query_current();
+  uint32_t version = 0;
+  std::vector<std::pair<uint8_t, uint64_t>> daemon_hard_forks;
+  uint64_t daemon_height = 0;
+  uint64_t daemon_target_height = 0;
+  const boost::optional<std::string> connection_error =
+      m_date_query_node_rpc_proxy.get_rpc_version(version, daemon_hard_forks, daemon_height, daemon_target_height);
+  ensure_query_current();
+  if (connection_error)
     throw std::runtime_error("failed to connect to daemon: " + get_daemon_address());
-  }
-  ensure_query_current();
   if (version < MAKE_CORE_RPC_VERSION(1, 6))
-  {
     throw std::runtime_error("this function requires RPC version 1.6 or higher");
-  }
-
-  std::string err;
-  const uint64_t daemon_height = get_daemon_blockchain_height(err);
-  ensure_query_current();
-  if (!err.empty() || daemon_height == 0)
+  if (!m_allow_mismatched_daemon_version &&
+      !check_hard_fork_version(m_nettype, daemon_hard_forks, daemon_height, daemon_target_height, nullptr, nullptr, m_date_query_node_rpc_proxy))
+    throw std::runtime_error("failed to connect to daemon: " + get_daemon_address());
+  if (daemon_height == 0)
     throw std::runtime_error("failed to get blockchain height");
 
   uint64_t height_min = 0;
@@ -15929,10 +15954,10 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
   cryptonote::block_header_response header_min;
   cryptonote::block_header_response header_max;
   ensure_query_current();
-  if (m_node_rpc_proxy.get_block_header_by_height(height_min, header_min))
+  if (m_date_query_node_rpc_proxy.get_block_header_by_height(height_min, header_min))
     throw std::runtime_error("failed to get block timestamp");
   ensure_query_current();
-  if (m_node_rpc_proxy.get_block_header_by_height(height_max, header_max))
+  if (m_date_query_node_rpc_proxy.get_block_header_by_height(height_max, header_max))
     throw std::runtime_error("failed to get block timestamp");
   ensure_query_current();
 
@@ -15946,7 +15971,7 @@ uint64_t wallet2::get_blockchain_height_by_timestamp(uint64_t timestamp_target) 
     ensure_query_current();
     const uint64_t height_mid = height_min + (height_max - height_min) / 2;
     cryptonote::block_header_response header_mid;
-    if (m_node_rpc_proxy.get_block_header_by_height(height_mid, header_mid))
+    if (m_date_query_node_rpc_proxy.get_block_header_by_height(height_mid, header_mid))
       throw std::runtime_error("failed to get block timestamp");
     ensure_query_current();
 
